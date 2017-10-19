@@ -49,7 +49,8 @@ def parse_arg(): # parses all the command line arguments
 
 def load(file_name): # loads a .train .dev .test input file
   lines = []
-  enc = 'latin8' if 'test' in file_name else 'utf-8'
+  enc = 'latin8'# if 'test' in file_name else 'utf-8'
+  #line.decode('iso-8859-1')
   with open(file_name, 'r', encoding=enc) as f:
     for line in f:
       lines.append(line)
@@ -88,14 +89,22 @@ if __name__ == "__main__":
   print(c)
 
   inp_str = 'abcde'
+  inp_label = [1.0, 0.0, 0.0]
   #inp_enc = encode_input(inp_str)
 
   # inp_enc is now the input!
   model = Network()
   model.add(Encoder(5, c))
   model.add(Linear(5*len(c), d))
+  model.add(Sigmoid())
+  model.add(Linear(d, 3))
+  model.add(Softmax())
 
-  model.forward(inp_str)   
+  out = model.forward(inp_str)   
+  loss, d_o = square_error(out, inp_label)
+  print(loss)
+  model.backward(d_o)
+  model.update(eta)
 
 
 
