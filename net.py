@@ -139,3 +139,22 @@ class Network(object):
   def update(self, eta):
     for layer in self.layers:
       layer.update(eta)
+
+  def evaluate(self, data, label_encoder):
+      tested = 0
+      correct = 0
+      for line in data:
+        split = line.split(' ')
+        lang = split[0] # Make label
+        label = label_encoder.forward([lang])
+        sentence = line[len(lang):] # Make sentence
+        
+        for start in range(len(sentence)-5):
+          inp_str = sentence[start:start+5] 
+          out = self.forward(inp_str)   
+          pred_idx = np.argmax(out)
+          if label[pred_idx] == 1.0:
+            correct += 1
+          tested += 1
+      accuracy = correct / (1.0 * tested)
+      return accuracy

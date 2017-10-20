@@ -1,6 +1,9 @@
 import os
-import argparse
+import random
 import math
+import argparse
+import pickle
+
 from sklearn.preprocessing import OneHotEncoder
 import numpy as np
 
@@ -22,16 +25,12 @@ Line1  Language1
 Line2  Language2
 ...
 LineN  LanguageN
-(where  Line i   represents  the  content  of  the  i  th  line  in  the  test  file,  and  Language i   is  the
+(where  Line i   realphabets  the  content  of  the  i  th  line  in  the  test  file,  and  Language i   is  the
 language  determined  as  most  likely).  Submit  this  file  with  your  assignment.
 """
 
 d = 100
 eta = 0.001
-
-def mse(y, y_hat):
-  return 0.5 * ((y - y_hat) ** 2)
-
 
 def parse_arg(): # parses all the command line arguments
     parser = argparse.ArgumentParser('SBD')
@@ -58,53 +57,94 @@ def load(file_name): # loads a .train .dev .test input file
 
   return lines
 
+def increment_dict(inp_dict, token):
+  if token not in inp_dict:
+    inp_dict[token] = 1 
+  else:
+    inp_dict[token] += 1
+  return inp_dict 
 
-def is_char_n_eos(line, char):
-    return (line[1][-1] == char and \
-       (line[2] == 'EOS' or line[2] == 'NEOS')) # counts periods that are the last element in the token
-
-
-def count_c(files):
-  present = {}
-  for f in files:
+def count(files):
+  languages = {}
+  alphabet = {}
+  for i, f in enumerate(files):
     for line in f:
-      for char in line:
-        if char not in present:
-          present[char] = 1 
-        else:
-          present[char] += 1
-  return present
+      for token in line:
+        alphabet = increment_dict(alphabet, token)
+      if i < 2:
+        lang = line.split(' ')[0]
+        languages = increment_dict(languages, lang)
+  return alphabet, languages
 
 
 # MAIN
 if __name__ == "__main__":
-  args = parse_arg()
+  args = parse_arg() # Parse paths to data files
 
-  train = load(args.train_file)
+  train = load(args.train_file) # Load these files from disk
   dev = load(args.dev_file)
   test = load(args.test_file)
 
-  c = count_c([train, dev, test])
-  print("A dict of the characters found")
-  print(c)
+  alphabet, langs = count([train, dev, test]) # Count alphabet and languages
+  print("--- Characters Found ---")
+  print(alphabet)
+  print("--- Languages Found ---")
+  print(langs)
 
-  inp_str = 'abcde'
-  inp_label = [1.0, 0.0, 0.0]
-  #inp_enc = encode_input(inp_str)
+  if os.path.exists('model.p'):
+    model = pickle.load(open("model.p", "rb"))
+    label_encoder = pickle.load(open("label_encoder.p", "rb"))
+  else:
+    label_encoder = Encoder(1, langs) # Make language encoder
 
-  # inp_enc is now the input!
-  model = Network()
-  model.add(Encoder(5, c))
-  model.add(Linear(5*len(c), d))
-  model.add(Sigmoid())
-  model.add(Linear(d, 3))
-  model.add(Softmax())
+    model = Network() # Make the neural network 
+    model.add(Encoder(5, alphabet))
+    model.add(Linear(5*len(alphabet), d))
+    model.add(Sigmoid())
+    model.add(Linear(d, 3))
+    model.add(Softmax())
 
-  out = model.forward(inp_str)   
-  loss, d_o = square_error(out, inp_label)
-  print(loss)
-  model.backward(d_o)
-  model.update(eta)
+  dev_accuracy = []
+  train_accuracy = []
+  epochs = 3
+  for epoch in range(epochs):
+    # Test on dev and train data
+    #dev_accuracy.append(model.evaluate(train, label_encoder))
+    #print("Dev Accuracy: %4f" % (dev_accuracy[-1]))
+    #train_accuracy.append(model.evaluate(train, label_encoder))
+    #print("Train Accuracy: %4f" % (train_accuracy[-1]))
+
+    size = len(train)
+    correct = 0
+    tested = 0
+    for i in range(size):
+      line = random.choice(train) # SGD
+      split = line.split(' ')
+      lang = split[0] # Make label
+      label = label_encoder.forward([lang])
+      sentence = line[len(lang):] # Make sentence
+      sections = [sentence[start:start+5] for start in range(len(sentence)-4)] # Carve into sections
+      random.shuffle(sections)
+      
+      for inp_str in sections:
+        out = model.forward(inp_str)   
+        loss, d_o = square_error(out, label)
+        model.backward(d_o)
+        model.update(eta)
+
+        pred_idx = np.argmax(out)
+        if label[pred_idx] == 1.0:
+          correct += 1
+        tested += 1
+        accuracy = correct / (1.0 * tested)
+      
+      if i % 100 == 0:
+        print("%4d / %4d Sentences. Accuracy: %4f" % (i, size, accuracy))
+
+    pickle.dump(model, open("model.p", "wb")) # Save model for later
+    pickle.dump(dev_accuracy, open("da.p", "wb")) # Save model for later
+    pickle.dump(train_accuracy, open("ta.p", "wb")) # Save model for later
+    pickle.dump(label_encoder, open("label_encoder.p", "wb")) # Save model for later
 
 
 
