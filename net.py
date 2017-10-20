@@ -14,6 +14,9 @@ class Layer(object):
   def update(self, eta):
     pass
 
+  def test(self):
+    pass
+
 
 # Input is 5c dimensional, where c is set of all characters used in 3 languages 
 class Encoder(Layer):
@@ -38,16 +41,19 @@ class Encoder(Layer):
 class Linear(Layer):
   def __init__(self, inp_size, d):
     # for every hidden neuron
-    self.weights = np.random.randn(d, inp_size)
-    self.bias = np.random.randn(d)
+    self.weights = np.random.uniform(-0.1, 0.1, (d, inp_size))
+    self.bias = np.random.uniform(-0.1, 0.1, d)
     self.inp = None
     self.d_o = None
+    self.d = d
+    self.d_weights = np.zeros((d, inp_size))
+    self.d_bias = np.zeros(d)
 
   def forward(self, inp):
     # 1 x 507 * 100 * 507 (need transpose of weights) = 1 x 100
     self.inp = inp
     # np.matmul automatically adds dimensions we need for multiplication
-    return np.add(np.matmul(inp, self.weights.T), self.bias.T)
+    return np.matmul(self.weights, inp) + self.bias 
 
   def backward(self, d_o):
     self.d_o = d_o
@@ -56,11 +62,22 @@ class Linear(Layer):
   def update(self, eta):
     d_o = self.d_o.reshape((-1, 1))
     inp = self.inp.reshape((-1, 1))
-    d_weights = np.matmul(d_o, inp.T)
-    d_bias = self.d_o
-    self.weights = self.weights - d_weights * eta
-    self.bias = self.bias - d_bias * eta
+    self.d_weights = np.matmul(d_o, inp.T)# + self.d_weights # momentum
+    self.d_bias = self.d_o# self.d_bias * 0.9
+    self.weights = (self.weights - self.d_weights * eta)# * (1.0-0.00005) # weight decay
+    self.bias = (self.bias - self.d_bias * eta)# * (1.0-0.00005)
 
+  def test(self):
+    print('---Linear Test---')
+    inp = np.array([1.0, 0.5]) 
+    self.weights = np.array([[0.3, 0.2], [0.5, 0.3], [0.0, 0.0]]) 
+    self.bias = np.array([0.1, 0.4, 0.1]) 
+    out = self.forward(inp)
+    target = np.array([1.0, 0.0, 0.0]) 
+    diff = np.array([-1.0, -10.0, 0.0])
+    back = self.backward(diff)
+    u = self.update(.1)
+    return out
 
 class Sigmoid(Layer):
   def __init__(self):
@@ -68,17 +85,19 @@ class Sigmoid(Layer):
     self.out = None
 
   def forward(self, inp):
-    # 1x100 * 100x507 -> 1x100 (need transpose of weights)
-    # np.matmul automatically adds dimensions we need for multiplication
     self.out = 1.0 / (1.0 + np.exp(-inp))
     return self.out
 
   def backward(self, d_o):
-    return self.out * (1 - self.out)
-
-  def update(self, eta):
-    # no weights
-    pass
+    return d_o * self.out * (1 - self.out)
+  
+  def test(self):
+    print('---Sigmoid Test---')
+    inp = np.array([500, 100, -100, -500]) 
+    out = self.forward(inp)
+    print(inp)
+    print(out)
+    return out
 
 
 class Softmax(Layer):
@@ -87,30 +106,38 @@ class Softmax(Layer):
     self.out = None
 
   def forward(self, inp):
-    sum = np.sum(np.exp(inp))
-    self.out = np.exp(inp)/sum
+    denom = sum(np.exp(inp))
+    self.out = np.exp(inp)/denom
     return self.out
 
   def backward(self, d_o):
-    jacobian = np.zeros((len(d_o), len(d_o))) # d_or is 3x1, deriv w.r.t. to all inp is 3x3 
-    for i in range(len(d_o)): # for each d_o idx
-      for j in range(len(d_o)): # for each pos idx
-        if i==j:
+    jacobian = np.zeros((len(self.out), len(self.out))) # d_or is 3x1, deriv w.r.t. to all inp is 3x3 
+    for i in range(len(self.out)): # for each index in the error
+      for j in range(len(self.out)): # for each index in the softmax output
+        if i==j: # if they are the same index, this deriv should encourage the output
             jacobian[i][j] = self.out[i] - self.out[i] * self.out[i];
-        else:
+        else: # if different, they should be penalized
             jacobian[i][j] = -self.out[i] * self.out[j]
 
-    d_i = np.matmul(jacobian, d_o);
+    d_i = np.matmul(jacobian, d_o)
     return d_i 
 
   def update(self, eta):
     # no weights
     pass
 
+  def test(self):
+    print('---Softmax Test---')
+    inp = np.array([0.9, 0.5, 0.5]) 
+    out = self.forward(inp)
+    print(inp)
+    print(out)
+    return out
 
-def square_error(inp, y_hat):
-  diff = np.subtract(inp, y_hat)
-  return 0.5 * (np.power(diff, 2)), diff
+
+def square_error(inp, labels):
+  diff = inp - labels 
+  return sum(0.5 * (np.power(diff, 2))), diff
 
 
 class Network(object):
