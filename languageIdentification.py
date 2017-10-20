@@ -77,7 +77,6 @@ def count(files):
   return alphabet, languages
 
 
-# MAIN
 if __name__ == "__main__":
   args = parse_arg() # Parse paths to data files
 
@@ -109,10 +108,10 @@ if __name__ == "__main__":
   epochs = 3
   for epoch in range(epochs):
     # Test on dev and train data
-    #dev_accuracy.append(model.evaluate(train, label_encoder))
-    #print("Dev Accuracy: %4f" % (dev_accuracy[-1]))
-    #train_accuracy.append(model.evaluate(train, label_encoder))
-    #print("Train Accuracy: %4f" % (train_accuracy[-1]))
+    dev_accuracy.append(model.evaluate(train, label_encoder))
+    print("Dev Accuracy: %4f" % (dev_accuracy[-1]))
+    train_accuracy.append(model.evaluate(train, label_encoder))
+    print("Train Accuracy: %4f" % (train_accuracy[-1]))
 
     size = len(train)
     correct = 0
