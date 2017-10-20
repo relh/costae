@@ -58,8 +58,8 @@ class Linear(Layer):
     inp = self.inp.reshape((-1, 1))
     d_weights = np.matmul(d_o, inp.T)
     d_bias = self.d_o
-    self.weights = (self.weights - d_weights * eta)
-    self.bias = (self.bias - d_bias * eta)
+    self.weights = self.weights - d_weights * eta
+    self.bias = self.bias - d_bias * eta
 
 
 class Sigmoid(Layer):
@@ -149,7 +149,7 @@ class Network(object):
         label = label_encoder.forward([lang])
         sentence = line[len(lang):] # Make sentence
         
-        for start in range(len(sentence)-5):
+        for start in range(len(sentence)-4):
           inp_str = sentence[start:start+5] 
           out = self.forward(inp_str)   
           pred_idx = np.argmax(out)

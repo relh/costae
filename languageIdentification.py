@@ -29,9 +29,6 @@ LineN  LanguageN
 language  determined  as  most  likely).  Submit  this  file  with  your  assignment.
 """
 
-d = 100
-eta = 0.001
-
 def parse_arg(): # parses all the command line arguments
     parser = argparse.ArgumentParser('SBD')
     parser.add_argument('--train_file', type=str, default='languageIdentification.data/train', help='training file')
@@ -67,65 +64,85 @@ def increment_dict(inp_dict, token):
 def count(files):
   languages = {}
   alphabet = {}
+  lengths = []
   for i, f in enumerate(files):
     for line in f:
+      lengths.append(len(line))
       for token in line:
         alphabet = increment_dict(alphabet, token)
       if i < 2:
         lang = line.split(' ')[0]
         languages = increment_dict(languages, lang)
-  return alphabet, languages
+  return alphabet, languages, lengths
 
 
 if __name__ == "__main__":
+  #d = 100
+  #eta = 0.1
   args = parse_arg() # Parse paths to data files
 
   train = load(args.train_file) # Load these files from disk
   dev = load(args.dev_file)
   test = load(args.test_file)
 
-  alphabet, langs = count([train, dev, test]) # Count alphabet and languages
+  alphabet, langs, lengths = count([train, dev, test]) # Count alphabet and languages
   print("--- Characters Found ---")
   print(alphabet)
   print("--- Languages Found ---")
   print(langs)
+  print("--- Average Sentence Length ---")
+  sentence_length = sum(lengths) / (1.0 * len(lengths)) - len('FRENCH')
+  print(sentence_length)
 
-  if os.path.exists('model.p'):
-    model = pickle.load(open("model.p", "rb"))
-    label_encoder = pickle.load(open("label_encoder.p", "rb"))
-  else:
-    label_encoder = Encoder(1, langs) # Make language encoder
+  # Prep dataset for good randomness
+  data_langs = []
+  sections = []
+  for line in train:
+    lang = line.split(' ')[0]
+    if len(line[len(lang):]) < 3: # This removes sentences that are too short to be used
+      continue
+    data_langs.append(lang)
+    sentence = line[len(lang):]
+    sections.append([sentence[start:start+5] for start in range(len(sentence)-4)]) # Carve sentence into sections
 
-    model = Network() # Make the neural network 
-    model.add(Encoder(5, alphabet))
-    model.add(Linear(5*len(alphabet), d))
-    model.add(Sigmoid())
-    model.add(Linear(d, 3))
-    model.add(Softmax())
+  for d, eta in zip([100, 10, 250, 75, 100, 100], [0.1, 0.01, 0.05, 0.1, 0.05, 0.2]):
+    if os.path.exists('model_{}_{}.p'.format(d,eta)):
+      print("Loading model..")
+      model = pickle.load(open("model_{}_{}.p".format(d,eta), "rb"))
+      label_encoder = pickle.load(open("label_encoder_{}_{}.p".format(d,eta), "rb"))
+    else:
+      print("Creating model..")
+      label_encoder = Encoder(1, langs) # Make language encoder
 
-  dev_accuracy = []
-  train_accuracy = []
-  epochs = 3
-  for epoch in range(epochs):
-    # Test on dev and train data
-    dev_accuracy.append(model.evaluate(train, label_encoder))
-    print("Dev Accuracy: %4f" % (dev_accuracy[-1]))
-    train_accuracy.append(model.evaluate(train, label_encoder))
-    print("Train Accuracy: %4f" % (train_accuracy[-1]))
+      model = Network() # Make the neural network 
+      model.add(Encoder(5, alphabet))
+      model.add(Linear(5*len(alphabet), d))
+      model.add(Sigmoid())
+      model.add(Linear(d, 3))
+      model.add(Softmax())
 
-    size = len(train)
-    correct = 0
-    tested = 0
-    for i in range(size):
-      line = random.choice(train) # SGD
-      split = line.split(' ')
-      lang = split[0] # Make label
-      label = label_encoder.forward([lang])
-      sentence = line[len(lang):] # Make sentence
-      sections = [sentence[start:start+5] for start in range(len(sentence)-4)] # Carve into sections
-      random.shuffle(sections)
-      
-      for inp_str in sections:
+    dev_accuracy = []
+    train_accuracy = []
+    epochs = 3
+    for epoch in range(epochs):
+      # Decrease eta over time
+      #eta = 1/(epoch+1) * eta
+
+      # Test on dev and train data
+      print("Epoch: %2d" % epoch)
+      dev_accuracy.append(model.evaluate(dev, label_encoder))
+      print("Dev Accuracy: %4f" % (dev_accuracy[-1]))
+      train_accuracy.append(model.evaluate(train, label_encoder))
+      print("Train Accuracy: %4f" % (train_accuracy[-1]))
+
+      correct = 0
+      tested = 0
+      samples = len(train)*int(sentence_length)
+      for i in range(samples): # Want to do as many SGD samples as sentences*their windows
+        idx = random.randint(0, len(data_langs)-1)
+        label = label_encoder.forward([data_langs[idx]])
+        inp_str = random.choice(sections[idx])
+        
         out = model.forward(inp_str)   
         loss, d_o = square_error(out, label)
         model.backward(d_o)
@@ -135,15 +152,15 @@ if __name__ == "__main__":
         if label[pred_idx] == 1.0:
           correct += 1
         tested += 1
-        accuracy = correct / (1.0 * tested)
-      
-      if i % 100 == 0:
-        print("%4d / %4d Sentences. Accuracy: %4f" % (i, size, accuracy))
 
-    pickle.dump(model, open("model.p", "wb")) # Save model for later
-    pickle.dump(dev_accuracy, open("da.p", "wb")) # Save model for later
-    pickle.dump(train_accuracy, open("ta.p", "wb")) # Save model for later
-    pickle.dump(label_encoder, open("label_encoder.p", "wb")) # Save model for later
+        if i > 0 and i % 10000 == 0:
+          accuracy = correct / (1.0 * tested)
+          print("%.4f %4d / %4d Chunks. Accuracy: %.4f" % (i / (1.0 * samples), i, samples, accuracy))
+
+    pickle.dump(model, open("model_{}_{}.p".format(d,eta), "wb")) # Save model for later
+    pickle.dump(dev_accuracy, open("da_{}_{}.p".format(d,eta), "wb")) # Save model for later
+    pickle.dump(train_accuracy, open("ta_{}_{}.p".format(d,eta), "wb")) # Save model for later
+    pickle.dump(label_encoder, open("label_encoder_{}_{}.p".format(d,eta), "wb")) # Save model for later
 
 
 
