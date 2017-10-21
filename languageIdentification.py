@@ -8,6 +8,7 @@ from sklearn.preprocessing import OneHotEncoder
 import numpy as np
 
 from net import *
+from test import *
 
 # Name: Richard Higgins
 # Uniqname: Relh
@@ -31,9 +32,9 @@ language  determined  as  most  likely).  Submit  this  file  with  your  assign
 
 def parse_arg(): # parses all the command line arguments
     parser = argparse.ArgumentParser('SBD')
-    parser.add_argument('--train_file', type=str, default='languageIdentification.data/train', help='training file')
-    parser.add_argument('--dev_file', type=str, default='languageIdentification.data/dev', help='dev file')
-    parser.add_argument('--test_file', type=str, default='languageIdentification.data/test', help='test file')
+    parser.add_argument('train_file', type=str, default='languageIdentification.data/train', help='training file')
+    parser.add_argument('dev_file', type=str, default='languageIdentification.data/dev', help='dev file')
+    parser.add_argument('test_file', type=str, default='languageIdentification.data/test', help='test file')
     parser.add_argument('--window', type=int, default=5, help='char range to observer')
     parser.add_argument('-d', type=int, default=100, help='number of hidden layer neurons')
     parser.add_argument('--eta', type=float, default=0.1, help='learning rate')
@@ -128,7 +129,7 @@ if __name__ == "__main__":
 
   dev_accuracy = []
   train_accuracy = []
-  epochs = 5
+  epochs = 3
   for epoch in range(epochs):
     # Decrease eta over time
     #eta = 1/(epoch+1) * eta
@@ -171,3 +172,5 @@ if __name__ == "__main__":
   pickle.dump(dev_accuracy, open("da_{}_{}.p".format(d,eta), "wb")) # Save model for later
   pickle.dump(train_accuracy, open("ta_{}_{}.p".format(d,eta), "wb")) # Save model for later
   pickle.dump(label_encoder, open("label_encoder_{}_{}.p".format(d,eta), "wb")) # Save model for later
+
+  run_test(test, model, dev_accuracy, train_accuracy, label_encoder)

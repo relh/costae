@@ -1,5 +1,7 @@
 import numpy as np
 
+# Name: Richard Higgins
+# Uniqname: Relh
 
 class Layer(object):
   def __init__(self, params):
